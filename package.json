@@ -1,0 +1,35 @@
+{
+  "name": "ethical-web-scraper-demo",
+  "version": "1.0.0",
+  "description": "A Node.js application demonstrating responsible web automation with Playwright",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "nodemon app.js",
+    "test": "jest"
+  },
+  "keywords": [
+    "web-scraping",
+    "automation",
+    "playwright",
+    "node",
+    "express",
+    "ethical"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "archiver": "^5.3.1",
+    "express": "^4.18.2",
+    "node-cache": "^5.1.2",
+    "playwright": "^1.33.0"
+  },
+  "devDependencies": {
+    "jest": "^29.5.0",
+    "nodemon": "^2.0.22"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
+
