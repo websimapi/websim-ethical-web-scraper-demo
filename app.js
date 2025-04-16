@@ -33,14 +33,81 @@ app.get('/api/products', async (req, res) => {
 
 // Generate and serve the ZIP file for download
 app.get('/download', (req, res) => {
+  // Create temp directory if it doesn't exist
+  const tempDir = path.join(__dirname, 'temp');
+  if (!fs.existsSync(tempDir)) {
+    try {
+      fs.mkdirSync(tempDir, { recursive: true });
+    } catch (err) {
+      console.error('Error creating temp directory:', err);
+      return res.status(500).send('Error creating temporary directory for download');
+    }
+  }
+
   const zipFileName = 'ethical-web-scraper-demo.zip';
-  const output = fs.createWriteStream(path.join(__dirname, 'temp', zipFileName));
+  const zipFilePath = path.join(tempDir, zipFileName);
+  
+  // Remove existing zip file if it exists
+  if (fs.existsSync(zipFilePath)) {
+    try {
+      fs.unlinkSync(zipFilePath);
+    } catch (err) {
+      console.error('Error removing existing zip file:', err);
+    }
+  }
+  
+  const output = fs.createWriteStream(zipFilePath);
   const archive = archiver('zip', { zlib: { level: 9 } });
+  
+  // Listen for all archive data to be written
+  output.on('close', function() {
+    console.log(`Zip created successfully: ${archive.pointer()} total bytes`);
+    
+    // Send the file
+    res.download(zipFilePath, zipFileName, (err) => {
+      if (err) {
+        console.error('Error sending zip file:', err);
+        // Only attempt to delete if sending failed
+        if (!res.headersSent) {
+          return res.status(500).send('Error sending download file');
+        }
+      }
+      
+      // Clean up temp file after a delay to ensure download completes
+      setTimeout(() => {
+        try {
+          if (fs.existsSync(zipFilePath)) {
+            fs.unlinkSync(zipFilePath);
+          }
+        } catch (e) {
+          console.error('Error cleaning up zip file:', e);
+        }
+      }, 5000);
+    });
+  });
+  
+  // Handle archive warnings
+  archive.on('warning', function(err) {
+    if (err.code === 'ENOENT') {
+      console.warn('Archive warning:', err);
+    } else {
+      console.error('Archive error:', err);
+      output.end();
+      return res.status(500).send('Error preparing download file');
+    }
+  });
+  
+  // Handle archive errors
+  archive.on('error', function(err) {
+    console.error('Error creating zip:', err);
+    output.end();
+    return res.status(500).send('Error creating download file');
+  });
   
   // Pipe archive data to the file
   archive.pipe(output);
   
-  // Add files to the zip
+  // Files to include in the zip
   const filesToZip = [
     { source: 'app.js', dest: 'app.js' },
     { source: 'package.json', dest: 'package.json' },
@@ -53,38 +120,22 @@ app.get('/download', (req, res) => {
     { source: 'public/script.js', dest: 'public/script.js' }
   ];
   
+  // Check if files exist before adding them to the archive
   filesToZip.forEach(file => {
-    archive.file(path.join(__dirname, file.source), { name: file.dest });
+    const filePath = path.join(__dirname, file.source);
+    if (fs.existsSync(filePath)) {
+      archive.file(filePath, { name: file.dest });
+    } else {
+      console.warn(`Warning: File not found: ${filePath}`);
+      // Add a placeholder for missing files
+      archive.append(`This file was missing in the original project: ${file.source}`, { name: file.dest });
+    }
   });
   
   // Finalize the archive
   archive.finalize();
-  
-  output.on('close', () => {
-    res.download(path.join(__dirname, 'temp', zipFileName), err => {
-      if (err) {
-        console.error('Error sending zip file:', err);
-      }
-      
-      // Clean up the temp file after sending
-      fs.unlink(path.join(__dirname, 'temp', zipFileName), err => {
-        if (err) console.error('Error deleting temp file:', err);
-      });
-    });
-  });
-  
-  archive.on('error', err => {
-    console.error('Error creating zip:', err);
-    res.status(500).send('Error creating download file');
-  });
 });
-
-// Create temp directory if it doesn't exist
-if (!fs.existsSync(path.join(__dirname, 'temp'))) {
-  fs.mkdirSync(path.join(__dirname, 'temp'));
-}
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
-
