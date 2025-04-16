@@ -7,12 +7,12 @@ const { scrapeProductInfo } = require('./lib/scraper');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Serve static files
-app.use(express.static('public'));
+// Define routes first, before serving static files
+// This prevents static file middleware from handling dynamic routes
 
 // Serve the main page
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 // API endpoint for product search
@@ -136,6 +136,15 @@ app.get('/download', (req, res) => {
   archive.finalize();
 });
 
+// Serve static files AFTER defining all dynamic routes
+app.use(express.static('public'));
+
+// Fallback route for public/index.html in case user directly navigates to /public
+app.get('/public', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Download demo available at http://localhost:${PORT}/download`);
 });
