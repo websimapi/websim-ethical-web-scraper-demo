@@ -7,6 +7,19 @@ const { scrapeProductInfo } = require('./lib/scraper');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Create a zip file on server start
+const tempDir = path.join(__dirname, 'temp');
+const zipFileName = 'ethical-web-scraper-demo.zip';
+const zipFilePath = path.join(tempDir, zipFileName);
+
+// Ensure temp directory exists
+if (!fs.existsSync(tempDir)) {
+  fs.mkdirSync(tempDir, { recursive: true });
+}
+
+// Create zip file at startup
+createZipFile(zipFilePath);
+
 // Define routes first, before serving static files
 // This prevents static file middleware from handling dynamic routes
 
@@ -33,19 +46,26 @@ app.get('/api/products', async (req, res) => {
 
 // Generate and serve the ZIP file for download
 app.get('/download', (req, res) => {
-  // Create temp directory if it doesn't exist
-  const tempDir = path.join(__dirname, 'temp');
-  if (!fs.existsSync(tempDir)) {
-    try {
-      fs.mkdirSync(tempDir, { recursive: true });
-    } catch (err) {
-      console.error('Error creating temp directory:', err);
-      return res.status(500).send('Error creating temporary directory for download');
-    }
+  if (fs.existsSync(zipFilePath)) {
+    res.download(zipFilePath, zipFileName, (err) => {
+      if (err) {
+        console.error('Error sending zip file:', err);
+        if (!res.headersSent) {
+          return res.status(500).send('Error sending download file');
+        }
+      }
+    });
+  } else {
+    // If zip doesn't exist for some reason, create it and then send
+    createZipFile(zipFilePath, () => {
+      res.download(zipFilePath, zipFileName);
+    });
   }
+});
 
-  const zipFileName = 'ethical-web-scraper-demo.zip';
-  const zipFilePath = path.join(tempDir, zipFileName);
+// Function to create the zip file
+function createZipFile(zipFilePath, callback) {
+  console.log('Creating zip file at:', zipFilePath);
   
   // Remove existing zip file if it exists
   if (fs.existsSync(zipFilePath)) {
@@ -62,28 +82,7 @@ app.get('/download', (req, res) => {
   // Listen for all archive data to be written
   output.on('close', function() {
     console.log(`Zip created successfully: ${archive.pointer()} total bytes`);
-    
-    // Send the file
-    res.download(zipFilePath, zipFileName, (err) => {
-      if (err) {
-        console.error('Error sending zip file:', err);
-        // Only attempt to delete if sending failed
-        if (!res.headersSent) {
-          return res.status(500).send('Error sending download file');
-        }
-      }
-      
-      // Clean up temp file after a delay to ensure download completes
-      setTimeout(() => {
-        try {
-          if (fs.existsSync(zipFilePath)) {
-            fs.unlinkSync(zipFilePath);
-          }
-        } catch (e) {
-          console.error('Error cleaning up zip file:', e);
-        }
-      }, 5000);
-    });
+    if (callback) callback();
   });
   
   // Handle archive warnings
@@ -93,7 +92,6 @@ app.get('/download', (req, res) => {
     } else {
       console.error('Archive error:', err);
       output.end();
-      return res.status(500).send('Error preparing download file');
     }
   });
   
@@ -101,7 +99,6 @@ app.get('/download', (req, res) => {
   archive.on('error', function(err) {
     console.error('Error creating zip:', err);
     output.end();
-    return res.status(500).send('Error creating download file');
   });
   
   // Pipe archive data to the file
@@ -134,7 +131,7 @@ app.get('/download', (req, res) => {
   
   // Finalize the archive
   archive.finalize();
-});
+}
 
 // Serve static files AFTER defining all dynamic routes
 app.use(express.static('public'));
